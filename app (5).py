@@ -187,32 +187,43 @@ def extract_eis_features(z_real_list, z_imag_list):
 def train_eis_model():
     """
     Warwick DIB EIS 데이터셋으로 SOH 예측 모델 학습
-    zip(data/EIS_Test.zip) → zip(루트) → 폴더(data/EIS_Test/) 순서로 탐색
+    Cell02_95SOH_15degC_05SOC_9505.zip 파일 로드 (루트 또는 data 폴더)
     """
     import zipfile
     base_dir = os.path.dirname(__file__)
-    zip_data = os.path.join(base_dir, 'data', 'EIS_Test.zip')
-    zip_root = os.path.join(base_dir, 'EIS_Test.zip')
-    dir_path = os.path.join(base_dir, 'data', 'EIS_Test')
+    
+    # 찾을 파일 경로 (우선순위 순)
+    zip_candidates = [
+        os.path.join(base_dir, 'Cell02_95SOH_15degC_05SOC_9505.zip'),
+        os.path.join(base_dir, 'data', 'Cell02_95SOH_15degC_05SOC_9505.zip'),
+        os.path.join(base_dir, 'data', 'EIS_Test.zip'),
+        os.path.join(base_dir, 'EIS_Test.zip'),
+        os.path.join(base_dir, 'data', 'EIS_Test'),
+    ]
 
     file_items = []
-    if os.path.exists(zip_data):
-        with zipfile.ZipFile(zip_data, 'r') as zf:
-            for zname in zf.namelist():
-                fname = os.path.basename(zname)
+    
+    # zip 파일 탐색
+    for zip_path in zip_candidates:
+        if os.path.isfile(zip_path) and zip_path.endswith('.zip'):
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as zf:
+                    for zname in zf.namelist():
+                        fname = os.path.basename(zname)
+                        if fname.endswith('.xls') and 'SOH' in fname:
+                            file_items.append((fname, zf.read(zname)))
+                if file_items:
+                    break
+            except Exception as e:
+                continue
+        elif os.path.isdir(zip_path):
+            for fname in os.listdir(zip_path):
                 if fname.endswith('.xls') and 'SOH' in fname:
-                    file_items.append((fname, zf.read(zname)))
-    elif os.path.exists(zip_root):
-        with zipfile.ZipFile(zip_root, 'r') as zf:
-            for zname in zf.namelist():
-                fname = os.path.basename(zname)
-                if fname.endswith('.xls') and 'SOH' in fname:
-                    file_items.append((fname, zf.read(zname)))
-    elif os.path.exists(dir_path):
-        for fname in os.listdir(dir_path):
-            if fname.endswith('.xls') and 'SOH' in fname:
-                file_items.append((fname, os.path.join(dir_path, fname)))
-    else:
+                    file_items.append((fname, os.path.join(zip_path, fname)))
+            if file_items:
+                break
+    
+    if not file_items:
         return None, 0, 0, 0
 
     X, y = [], []
@@ -914,7 +925,7 @@ if method == "⚡ EIS 기반 예측":
             else:
                 st.error("EIS 피처 추출 실패. 파일 형식을 확인해주세요.")
         else:
-            st.warning("⚠️ EIS 모델 미로드 — data/EIS_Test/ 폴더를 확인해주세요.")
+            st.warning("⚠️ EIS 모델 미로드 — Cell02_95SOH_15degC_05SOC_9505.zip 파일을 확인해주세요.")
     else:
         st.info("👆 EIS 파일을 업로드하면 분석이 시작됩니다.")
         st.markdown("""
