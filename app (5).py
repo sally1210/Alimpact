@@ -506,20 +506,32 @@ def compute_soh_from_mat(cycles_data):
     방전 사이클 Capacity로 SOH 계산
     SOH = 현재 방전 용량 / 초기 방전 용량 × 100
     출처: NASA PCoE 데이터셋 정의
+    
+    ※ NASA 데이터 특성:
+       - Capacity 값이 노이즈로 인해 불규칙함
+       - 따라서 모든 방전 용량의 최대값을 "정격 용량"으로 설정
+       - (이상값: 0, 매우 작은 값은 제외)
     """
     discharge = [c for c in cycles_data
-                 if c['type'] == 'discharge' and c['capacity_ah'] is not None]
+                 if c['type'] == 'discharge' and c['capacity_ah'] is not None
+                 and c['capacity_ah'] > 0.5]  # 0값, 이상값 제외 (0.5 Ah 이상)
+    
     if not discharge: return []
-    rated_cap = discharge[0]['capacity_ah']
+    
+    # 정격 용량 = 모든 방전 용량의 최대값
+    # (초기 배터리 상태를 나타내므로 가장 높은 값이 맞음)
+    rated_cap = max([c['capacity_ah'] for c in discharge])
+    
     result = []
     for i, c in enumerate(discharge):
-        soh = c['capacity_ah'] / rated_cap * 100
+        soh = min(c['capacity_ah'] / rated_cap * 100, 100)  # 100% 초과 방지
         result.append({
             'discharge_idx': i, 'cycle_idx': c['cycle_idx'],
-            'capacity_ah': c['capacity_ah'], 'soh_actual': round(soh, 2),
-            'voltage_mean': c['voltage_mean'], 'current_mean': c['current_mean'],
-            'temp_mean': c['temp_mean'], 'charge_time_s': c['charge_time_s'],
+            'capacity_ah': round(c['capacity_ah'], 4), 'soh_actual': round(soh, 2),
+            'voltage_mean': round(c['voltage_mean'], 3), 'current_mean': round(c['current_mean'], 3),
+            'temp_mean': round(c['temp_mean'], 1), 'charge_time_s': round(c['charge_time_s'], 0),
         })
+    
     impedance = [c for c in cycles_data
                  if c['type'] == 'impedance' and c['internal_r'] is not None]
     if impedance:
