@@ -738,7 +738,7 @@ def render_result(soh_final, soh_source, bat_type, years, cycles, voltage, mode_
     elif not recs:
         st.error("❌ 모든 활용처 기준 미달 — 재활용 공정 투입 권장 (조정 SOH 50% 미만)")
     else:
-        for i, rec in enumerate(recs):
+        for i, rec in enumerate(recs[:3]):  # 상위 3개만 표시
             cls  = "rec-card top-card" if i == 0 else "rec-card"
             rank = "✦ 최우선 추천" if i == 0 else f"{i+1}순위 추천"
             st.markdown(f"""
