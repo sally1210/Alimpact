@@ -962,31 +962,54 @@ elif method == "✏️ SOH 직접 입력":
         )
     with col_soh_input2:
         st.markdown("**📈 EIS 파일 (선택사항)**")
-        st.caption("임피던스 데이터로 부가 분석")
-        soh_eis_file = st.file_uploader(
+        st.caption("여러 개 업로드 가능 (최대 6개, 배터리당 4~6개 권장)")
+        soh_eis_files = st.file_uploader(
             "EIS (.xls / .csv)", type=['xls', 'xlsx', 'csv'],
-            key="soh_direct_eis"
+            key="soh_direct_eis",
+            accept_multiple_files=True
         )
     
-    # EIS 데이터 분석 - 360개 학습 ML 모델 사용
+    # 최대 6개 파일 제한
+    if soh_eis_files and len(soh_eis_files) > 6:
+        st.warning(f"⚠️ 최대 6개까지만 처리 가능합니다 (현재 {len(soh_eis_files)}개)")
+        soh_eis_files = soh_eis_files[:6]
+    
+    # EIS 데이터 분석 - 360개 학습 ML 모델 사용 (여러 파일 평균)
     soh_eis_predicted = None
     eis_info = ""
-    if soh_eis_file and eis_models:
-        try:
-            raw = soh_eis_file.read()
-            zr, zi = (parse_csv_eis(raw) if soh_eis_file.name.endswith('.csv') 
-                      else parse_xls_eis(raw))
-            soh_eis_predicted = predict_soh_eis(eis_models, zr, zi)
+    if soh_eis_files and eis_models:
+        soh_predictions = []
+        eis_details = []
+        
+        for eis_file in soh_eis_files:
+            try:
+                raw = eis_file.read()
+                zr, zi = (parse_csv_eis(raw) if eis_file.name.endswith('.csv') 
+                          else parse_xls_eis(raw))
+                soh_pred = predict_soh_eis(eis_models, zr, zi)
+                
+                if soh_pred:
+                    soh_predictions.append(soh_pred)
+                    eis_details.append(f"{eis_file.name}: {soh_pred:.1f}%")
+            except Exception as e:
+                st.warning(f"⚠️ {eis_file.name} 분석 실패: {e}")
+        
+        if soh_predictions:
+            soh_eis_predicted = round(np.mean(soh_predictions), 1)
+            diff = abs(soh_direct - soh_eis_predicted)
             
-            if soh_eis_predicted:
-                diff = abs(soh_direct - soh_eis_predicted)
-                if diff > 10:
-                    eis_info = f"⚠️ 입력 SOH({soh_direct}%)와 EIS 예측({soh_eis_predicted:.1f}%)의 차이가 큽니다 ({diff:.1f}%)"
-                else:
-                    eis_info = f"✅ EIS 예측({soh_eis_predicted:.1f}%)과 일치도 높음 (차이 {diff:.1f}%)"
-        except Exception as e:
-            st.warning(f"⚠️ EIS 파일 분석 실패: {e}")
-    elif soh_eis_file and not eis_models:
+            # 상세 정보 표시
+            with st.expander(f"📊 EIS 분석 상세 ({len(soh_predictions)}개 파일)"):
+                for detail in eis_details:
+                    st.caption(detail)
+                st.caption(f"**평균: {soh_eis_predicted:.1f}%**")
+            
+            # 검증 메시지
+            if diff > 10:
+                eis_info = f"⚠️ 입력 SOH({soh_direct}%)와 EIS 예측({soh_eis_predicted:.1f}%)의 차이가 큽니다 ({diff:.1f}%)"
+            else:
+                eis_info = f"✅ EIS 예측({soh_eis_predicted:.1f}%)과 일치도 높음 (차이 {diff:.1f}%)"
+    elif soh_eis_files and not eis_models:
         st.warning("⚠️ EIS 학습 모델 미로드 - EIS 파일 분석 불가")
     
     if st.button("📊 분석 실행", type="primary"):
