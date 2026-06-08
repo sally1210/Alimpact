@@ -951,14 +951,58 @@ if method == "⚡ EIS 기반 예측":
 # 모드 2: SOH 직접 입력
 # ─────────────────────────────────────────────
 elif method == "✏️ SOH 직접 입력":
-    st.markdown("### ✏️ SOH 직접 입력")
-    st.caption("실측 용량 데이터 또는 외부 측정 장비 결과를 직접 입력합니다.")
-    soh_direct = st.slider(
-        "SOH (%)", 10, 100, 80,
-        help="SOH = 현재 실제 용량 / 신품 정격 용량 × 100 (IEC 62660-1)"
-    )
+    st.markdown("### ✏️ SOH 직접 입력 + EIS 부가 분석")
+    st.caption("실측 SOH 입력 + (선택) EIS 파일로 부가 정보 분석 → 조정된 SOH 제공")
+    
+    col_soh_input1, col_soh_input2 = st.columns(2)
+    with col_soh_input1:
+        soh_direct = st.slider(
+            "SOH (%)", 10, 100, 80,
+            help="SOH = 현재 실제 용량 / 신품 정격 용량 × 100 (IEC 62660-1)"
+        )
+    with col_soh_input2:
+        st.markdown("**📈 EIS 파일 (선택사항)**")
+        st.caption("임피던스 데이터로 부가 분석")
+        soh_eis_file = st.file_uploader(
+            "EIS (.xls / .csv)", type=['xls', 'xlsx', 'csv'],
+            key="soh_direct_eis"
+        )
+    
+    # EIS 데이터 분석 - 360개 학습 ML 모델 사용
+    soh_eis_predicted = None
+    eis_info = ""
+    if soh_eis_file and eis_models:
+        try:
+            raw = soh_eis_file.read()
+            zr, zi = (parse_csv_eis(raw) if soh_eis_file.name.endswith('.csv') 
+                      else parse_xls_eis(raw))
+            soh_eis_predicted = predict_soh_eis(eis_models, zr, zi)
+            
+            if soh_eis_predicted:
+                diff = abs(soh_direct - soh_eis_predicted)
+                if diff > 10:
+                    eis_info = f"⚠️ 입력 SOH({soh_direct}%)와 EIS 예측({soh_eis_predicted:.1f}%)의 차이가 큽니다 ({diff:.1f}%)"
+                else:
+                    eis_info = f"✅ EIS 예측({soh_eis_predicted:.1f}%)과 일치도 높음 (차이 {diff:.1f}%)"
+        except Exception as e:
+            st.warning(f"⚠️ EIS 파일 분석 실패: {e}")
+    elif soh_eis_file and not eis_models:
+        st.warning("⚠️ EIS 학습 모델 미로드 - EIS 파일 분석 불가")
+    
     if st.button("📊 분석 실행", type="primary"):
-        render_result(soh_direct, "직접 입력 (IEC 62660-1 기준)",
+        # SOH 결정 (입력 60% + EIS 예측 40% 혼합)
+        if soh_eis_predicted:
+            soh_final = round(soh_direct * 0.6 + soh_eis_predicted * 0.4, 1)
+            soh_source = f"혼합({soh_direct}%×0.6 + {soh_eis_predicted:.1f}%×0.4) = {soh_final}%"
+            
+            # 검증 정보 표시
+            if eis_info:
+                st.info(eis_info)
+        else:
+            soh_final = soh_direct
+            soh_source = "직접 입력 (IEC 62660-1 기준)"
+        
+        render_result(soh_final, soh_source,
                       bat_type, years, cycles, voltage, "✏️ 직접 입력")
 
 # ─────────────────────────────────────────────
